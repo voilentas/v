@@ -5,7 +5,7 @@
 </style>
 <header><span class="mark">◆</span><strong>VOILENTA</strong><span style="color:#aaa">/ License Desk</span></header>
 <main><h1>License keys</h1><p>Issue one-PC licenses for Voilenta’s Windows installer.</p>
-<section class="card" id="signin"><h2>Team sign-in</h2><form id="login"><div class="grid"><label>Email<input id="email" type="email" autocomplete="username" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label></div><button>Sign in</button><details id="connection"><summary>Supabase connection</summary><label>Project publishable key<input id="publicKey" placeholder="sb_publishable_…" spellcheck="false" autocomplete="off"></label></details></form></section>
+<section class="card" id="signin"><h2>Team sign-in</h2><form id="login"><div class="grid"><label>Username<input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="voilenta" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label></div><button>Sign in</button></form></section>
 <section class="card" id="desk" hidden><h2>Generate a batch</h2><p id="account"></p><form id="issue"><div class="grid"><label>Number of keys<input id="count" type="number" min="1" max="50" value="20" required></label><label>Valid after first activation<select id="duration"><option value="60">1 hour</option><option value="1440">1 day</option><option value="10080">7 days</option><option value="43200">30 days</option><option value="">Lifetime</option></select></label></div><div class="actions"><button>Generate keys</button><button type="button" class="secondary" id="logout">Sign out</button></div></form></section>
 <p id="status" role="status" aria-live="polite"></p>
 <section class="card" id="results" hidden><h2>Generated keys</h2><p>Copy these now. The database stores only their references.</p><textarea id="keys" aria-label="Generated keys and references" readonly></textarea><button id="copy">Copy keys</button></section></main>
@@ -13,13 +13,10 @@
 'use strict';
 const project='https://whoubwpfbplsuobxuncw.supabase.co';
 const byId=id=>document.getElementById(id);
-let token='', apiKey='', batch=[];
+const apiKey='sb_publishable_TEPwpCgXCmBj8RloCP8xrA_nsLWIiag';
+const loginEmail='voilenta@voilenta-license-desk.onrender.com';
+let token='', batch=[];
 function notice(message){byId('status').textContent=message;}
-function publishable(value){
-  if(/^sb_publishable_[A-Za-z0-9_-]+$/.test(value))return true;
-  try{return JSON.parse(atob(value.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).role==='anon';}
-  catch{return false;}
-}
 async function request(route,data,accessToken){
   const headers={'Content-Type':'application/json',apikey:apiKey};
   if(accessToken)headers.Authorization='Bearer '+accessToken;
@@ -30,14 +27,13 @@ async function request(route,data,accessToken){
 }
 byId('login').onsubmit=async event=>{
   event.preventDefault();
-  apiKey=byId('publicKey').value.trim();
-  if(!publishable(apiKey)){byId('connection').open=true;notice('Enter the Supabase publishable key.');return;}
+  if(byId('username').value.trim().toLowerCase()!=='voilenta'){notice('Incorrect username or password.');return;}
   const button=event.currentTarget.querySelector('button');
   button.disabled=true;notice('Signing in…');
   try{
-    const auth=await request('/auth/v1/token?grant_type=password',{email:byId('email').value,password:byId('password').value});
+    const auth=await request('/auth/v1/token?grant_type=password',{email:loginEmail,password:byId('password').value});
     token=auth.access_token;byId('password').value='';byId('signin').hidden=true;byId('desk').hidden=false;
-    byId('account').textContent=auth.user.email;notice('');
+    byId('account').textContent='Signed in as voilenta';notice('');
   }catch(error){notice(error.message);}finally{button.disabled=false;}
 };
 byId('issue').onsubmit=async event=>{
