@@ -11,7 +11,7 @@
 <section class="card" id="results" hidden><h2>Generated keys</h2><p>Copy these now. The database stores only their references.</p><div class="key-list" id="keys"></div><button id="copy">Copy all license keys</button></section><section class="card" id="history" hidden>
 <h2>Key history</h2><button type="button" class="secondary" id="refresh">Refresh key history</button>
 <p id="historyStatus" role="status"></p>
-<div class="history-scroll"><table id="historyTable" hidden><thead><tr><th>Key reference</th><th>Issued</th><th>Status</th><th>Time remaining</th></tr></thead><tbody id="historyRows"></tbody></table></div>
+<div class="history-scroll"><table id="historyTable" hidden><thead><tr><th>Key reference</th><th>Issued</th><th>Status</th><th>Time remaining</th><th>Actions</th></tr></thead><tbody id="historyRows"></tbody></table></div>
 </section></main>
 <script>
 'use strict';
@@ -56,6 +56,7 @@ async function request(route,data,accessToken){
   const headers={'Content-Type':'application/json',apikey:apiKey};
   if(accessToken)headers.Authorization='Bearer '+accessToken;
   const response=await fetch(project+route,{method:'POST',headers,body:JSON.stringify(data),signal:AbortSignal.timeout(15000)});
+  if(response.status===204)return null;
   const result=await response.json();
   if(!response.ok)throw Error(result.message||result.msg||result.error_description||'Request failed.');
   return result;
@@ -134,6 +135,34 @@ function updateStatus({key,status,remaining}){
   const hours=Math.floor(minutes/60)%24;
   remaining.textContent=[days?days+'d':'',hours?hours+'h':'',minutes%60+'m'].filter(Boolean).join(' ');
 }
+async function manageKey(key,action,button){
+  let minutes=null;
+  if(action==='duration'){
+    const value=prompt(key.activated_at
+      ? 'Minutes remaining from now (or type lifetime)'
+      : 'Minutes after first activation (or type lifetime)');
+    if(value===null)return;
+    if(value.trim().toLowerCase()!=='lifetime'){
+      minutes=Number(value);
+      if(!Number.isInteger(minutes)||minutes<1||minutes>525600){
+        byId('historyStatus').textContent='Enter 1 to 525600 minutes, or lifetime.';
+        return;
+      }
+    }
+  }else if(!confirm(action==='remove'?'Permanently remove this unused key?':'Ban this key?'))return;
+  const accessToken=token;
+  button.disabled=true;
+  try{
+    await request('/rest/v1/rpc/voilenta_manage_key',{
+      p_reference:key.key_reference,p_action:action,p_minutes:minutes
+    },accessToken);
+    if(token===accessToken)await loadHistory();
+  }catch(error){
+    if(token===accessToken)byId('historyStatus').textContent=error.message;
+  }finally{
+    button.disabled=false;
+  }
+}
 async function loadHistory(){
   const accessToken=token;
   const requestId=++historyRequest;
@@ -148,9 +177,37 @@ async function loadHistory(){
       const row=document.createElement('tr');
       const reference=document.createElement('code');
       reference.textContent=key.key_reference;
-      row.insertCell().append(reference);
+      reference.style.overflowWrap='anywhere';
+      const details=document.createElement('details');
+      const summary=document.createElement('summary');
+      summary.append(reference);
+      details.append(summary);
+      const fields=[
+        ['Device fingerprint (hashed HWID)',key.device_hash??'No device recorded'],
+        ['Activated',key.activated_at?new Date(key.activated_at).toLocaleString():'Awaiting activation'],
+        ['Expires',key.expires_at?new Date(key.expires_at).toLocaleString():(key.activated_at?'Lifetime':'Starts at activation')]
+      ];
+      for(const [label,value] of fields){
+        const field=document.createElement('div');
+        field.textContent=label+': '+value;
+        field.style.overflowWrap='anywhere';
+        details.append(field);
+      }
+      row.insertCell().append(details);
       row.insertCell().textContent=key.issued_at?new Date(key.issued_at).toLocaleString():'—';
       const entry={key,row,status:row.insertCell(),remaining:row.insertCell()};
+      const actions=row.insertCell();
+      const controls=[];
+      if(!key.activated_at)controls.push(['remove','Remove']);
+      if(!key.revoked)controls.push(['revoke','Ban'],['duration','Change duration']);
+      for(const [action,label] of controls){
+        const button=document.createElement('button');
+        button.type='button';
+        button.className='secondary';
+        button.textContent=label;
+        button.onclick=()=>manageKey(key,action,button);
+        actions.append(button);
+      }
       updateStatus(entry);
       return entry;
     });
