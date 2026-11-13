@@ -103,6 +103,7 @@ byId('issue').onsubmit=async event=>{
     const minutes=duration==='custom'?Number(byId('amount').value)*Number(byId('unit').value):duration?Number(duration):null;
     if(minutes!==null&&(!Number.isInteger(minutes)||minutes<1||minutes>525600))throw Error('Choose a duration from 1 minute to 365 days.');
     batch=await request('/rest/v1/rpc/voilenta_issue_keys',{p_count:Number(byId('count').value),p_minutes:minutes},token);
+    for(const row of batch)issuedKeys.set(row.key_reference,row.license_key);
     showBatch(batch);
     byId('results').hidden=false;notice(batch.length+' keys generated.');loadHistory();
   }catch(error){notice(error.message);}finally{button.disabled=false;byId('logout').disabled=false;}
@@ -114,8 +115,10 @@ byId('copy').onclick=async()=>{
 byId('logout').onclick=()=>{forgetSession();token='';batch=[];clearHistory();byId('keys').replaceChildren();byId('account').textContent='';byId('signin').hidden=false;byId('desk').hidden=true;byId('results').hidden=true;notice('Signed out.');};
 let historyRequest=0;
 let displayedKeys=[];
+const issuedKeys=new Map();
 
 function clearHistory(){
+  issuedKeys.clear();
   displayedKeys=[];
   byId('historyRows').replaceChildren();
   byId('historyTable').hidden=true;
@@ -180,10 +183,19 @@ async function loadHistory(){
       reference.style.overflowWrap='anywhere';
       const details=document.createElement('details');
       const summary=document.createElement('summary');
+      const fullKey=issuedKeys.get(key.key_reference);
+      reference.textContent=fullKey??key.key_reference;
       summary.append(reference);
+      summary.style.cursor='pointer';
+      summary.style.color='#8af4bd';
       details.append(summary);
       const fields=[
-        ['Device fingerprint (hashed HWID)',key.device_hash??'No device recorded'],
+        ['License key',fullKey??'Original key unavailable. Supabase stores its reference.'],
+        ['Key reference',key.key_reference],
+        ['Issued',key.issued_at?new Date(key.issued_at).toLocaleString():'Unknown'],
+        ['Device fingerprint (hashed HWID)',Object.hasOwn(key,'device_hash')
+          ? key.device_hash??'No device recorded'
+          : 'Run the updated key-history SQL to show device fingerprints.'],
         ['Activated',key.activated_at?new Date(key.activated_at).toLocaleString():'Awaiting activation'],
         ['Expires',key.expires_at?new Date(key.expires_at).toLocaleString():(key.activated_at?'Lifetime':'Starts at activation')]
       ];
