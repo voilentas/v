@@ -11,6 +11,10 @@
 <style>
 .key-panels{display:grid;gap:24px;align-items:start}
 .key-panels>.card{min-width:0}
+.key-panels [data-key-reference]{color:#ff8b8b;overflow-wrap:anywhere}
+.key-panels [data-key-reference].active{color:#8af4bd}
+#historyRows summary, #historyRows summary code{color:#ff8b8b}
+#historyRows summary.active, #historyRows summary.active code{color:#8af4bd}
 #keys{max-height:60vh;overflow:auto}
 @media(min-width:1050px){
   main:has(#history:not([hidden])){max-width:1500px}
@@ -99,6 +103,7 @@ function showBatch(rows){
     referenceLabel.textContent='Key reference';
     const reference=document.createElement('code');
     reference.className='reference'; reference.textContent=row.key_reference;
+    reference.dataset.keyReference=row.key_reference;
     card.append(keyLabel,key,referenceLabel,reference);
     return card;
   });
@@ -142,7 +147,7 @@ function updateStatus({key,status,remaining,summary}){
   else if(minutes!==null&&minutes<=0)label='Expired';
   status.textContent=label;
   status.classList.toggle('active',label==='Active');
-  summary.style.color=label==='Active'?'#8af4bd':'#ff8b8b';
+  summary.classList.toggle('active',label==='Active');
   if(label!=='Active'){remaining.textContent='—';return;}
   if(minutes===null){remaining.textContent='Lifetime';return;}
   const days=Math.floor(minutes/1440);
@@ -211,7 +216,6 @@ async function loadHistory(successMessage='',removedReference=null){
       reference.textContent=fullKey??key.key_reference;
       summary.append(reference);
       summary.style.cursor='pointer';
-      summary.style.color='#8af4bd';
       details.append(summary);
       const fields=[
         ['License key',fullKey??'Original key unavailable. Supabase stores its reference.'],
@@ -225,7 +229,11 @@ async function loadHistory(successMessage='',removedReference=null){
       ];
       for(const [label,value] of fields){
         const field=document.createElement('div');
-        field.textContent=label+': '+value;
+        field.textContent=label+': ';
+        const content=document.createElement('span');
+        content.textContent=value;
+        if(label==='Key reference')content.dataset.keyReference=key.key_reference;
+        field.append(content);
         field.style.overflowWrap='anywhere';
         details.append(field);
       }
@@ -247,6 +255,7 @@ async function loadHistory(successMessage='',removedReference=null){
       return entry;
     });
     byId('historyRows').replaceChildren(...displayedKeys.map(entry=>entry.row));
+    updateReferenceColors();
     byId('historyTable').hidden=keys.length===0;
     if(removedReference!==null&&keys.some(key=>key.key_reference===removedReference)){
       successMessage='The key is still in Supabase. Rerun the latest voilenta_manage_key.sql, then click Remove again.';
@@ -259,7 +268,17 @@ async function loadHistory(successMessage='',removedReference=null){
   }
 }
 byId('refresh').onclick=()=>loadHistory();
-setInterval(()=>displayedKeys.forEach(updateStatus),1000);
+function updateReferenceColors(){
+  const activeReferences=new Set();
+  for(const entry of displayedKeys){
+    updateStatus(entry);
+    if(entry.summary.classList.contains('active'))activeReferences.add(entry.key.key_reference);
+  }
+  for(const reference of document.querySelectorAll('[data-key-reference]')){
+    reference.classList.toggle('active',activeReferences.has(reference.dataset.keyReference));
+  }
+}
+setInterval(updateReferenceColors,1000);
 try{
   const savedSession=localStorage.getItem(sessionKey);
   if(savedSession){
