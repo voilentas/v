@@ -134,7 +134,7 @@ function clearHistory(){
   byId('historyTable').hidden=true;
   byId('history').hidden=true;
 }
-function updateStatus({key,status,remaining}){
+function updateStatus({key,status,remaining,summary}){
   const minutes=key.expires_at===null?null:Math.ceil((Date.parse(key.expires_at)-Date.now())/60000);
   let label='Active';
   if(key.revoked)label='Revoked';
@@ -142,6 +142,7 @@ function updateStatus({key,status,remaining}){
   else if(minutes!==null&&minutes<=0)label='Expired';
   status.textContent=label;
   status.classList.toggle('active',label==='Active');
+  summary.style.color=label==='Active'?'#8af4bd':'#ff8b8b';
   if(label!=='Active'){remaining.textContent='—';return;}
   if(minutes===null){remaining.textContent='Lifetime';return;}
   const days=Math.floor(minutes/1440);
@@ -176,7 +177,8 @@ async function manageKey(key,action,button){
       byId('results').hidden=batch.length===0;
       if(action==='remove')issuedKeys.delete(key.key_reference);
     }
-    await loadHistory(action==='remove'?'Key removed.':action==='revoke'?'Key banned.':'Duration updated.');
+    await loadHistory(action==='remove'?'Key removed.':action==='revoke'?'Key banned.':'Duration updated.',
+      action==='remove'?key.key_reference:null);
   }catch(error){
     if(token===accessToken){
       const missing=error.message.includes('Could not find the function');
@@ -188,7 +190,7 @@ async function manageKey(key,action,button){
     button.disabled=false;
   }
 }
-async function loadHistory(successMessage=''){
+async function loadHistory(successMessage='',removedReference=null){
   const accessToken=token;
   const requestId=++historyRequest;
   const isCurrent=()=>token===accessToken&&historyRequest===requestId;
@@ -229,7 +231,7 @@ async function loadHistory(successMessage=''){
       }
       row.insertCell().append(details);
       row.insertCell().textContent=key.issued_at?new Date(key.issued_at).toLocaleString():'—';
-      const entry={key,row,status:row.insertCell(),remaining:row.insertCell()};
+      const entry={key,row,summary,status:row.insertCell(),remaining:row.insertCell()};
       const actions=row.insertCell();
       const controls=[['remove','Remove']];
       if(!key.revoked)controls.push(['revoke','Ban'],['duration','Change duration']);
@@ -246,9 +248,12 @@ async function loadHistory(successMessage=''){
     });
     byId('historyRows').replaceChildren(...displayedKeys.map(entry=>entry.row));
     byId('historyTable').hidden=keys.length===0;
+    if(removedReference!==null&&keys.some(key=>key.key_reference===removedReference)){
+      successMessage='The key is still in Supabase. Rerun the latest voilenta_manage_key.sql, then click Remove again.';
+    }
     byId('historyStatus').textContent=[successMessage,keys.length?'':'No keys have been issued.'].filter(Boolean).join(' ');
   }catch(error){
-    if(isCurrent())byId('historyStatus').textContent=[successMessage,'Could not load key history. '+error.message].filter(Boolean).join(' ');
+    if(isCurrent())byId('historyStatus').textContent='Could not verify key history. '+error.message;
   }finally{
     if(isCurrent())byId('refresh').disabled=false;
   }
