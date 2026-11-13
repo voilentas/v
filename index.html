@@ -162,7 +162,7 @@ async function manageKey(key,action,button){
         return;
       }
     }
-  }else if(!confirm(action==='remove'?'Permanently remove this unused key?':'Ban this key?'))return;
+  }else if(action==='revoke'&&!confirm('Ban this key?'))return;
   const accessToken=token;
   button.disabled=true;
   try{
