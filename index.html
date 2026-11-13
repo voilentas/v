@@ -176,7 +176,7 @@ async function manageKey(key,action,button){
       byId('results').hidden=batch.length===0;
       if(action==='remove')issuedKeys.delete(key.key_reference);
     }
-    await loadHistory(action==='remove'?'Key removed.':action==='revoke'?'Key banned.':'Duration updated.');
+    await loadHistory(action==='remove'?(key.activated_at?'Key expired.':'Key removed.'):action==='revoke'?'Key banned.':'Duration updated.');
   }catch(error){
     if(token===accessToken){
       const missing=error.message.includes('Could not find the function');
@@ -232,7 +232,9 @@ async function loadHistory(successMessage=''){
       const entry={key,row,status:row.insertCell(),remaining:row.insertCell()};
       const actions=row.insertCell();
       const controls=[];
-      if(!key.activated_at)controls.push(['remove','Remove']);
+      if(!key.activated_at||(!key.revoked&&(!key.expires_at||Date.parse(key.expires_at)>Date.now()))){
+        controls.push(['remove','Remove']);
+      }
       if(!key.revoked)controls.push(['revoke','Ban'],['duration','Change duration']);
       for(const [action,label] of controls){
         const button=document.createElement('button');
